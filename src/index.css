@@ -7,9 +7,19 @@
     color-scheme: light;
   }
 
-  body {
+  html,
+  body,
+  #root {
+    min-height: 100%;
     min-width: 320px;
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
     min-height: 100vh;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.96), rgba(207, 223, 251, 0.82) 34%, rgba(160, 181, 232, 0.78) 62%, rgba(211, 228, 255, 0.92) 100%);
   }
 
   button {

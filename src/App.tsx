@@ -290,6 +290,31 @@ export default function App() {
     [finished, isEndingAnimation, isBlank, digits]
   )
 
+  const handleUseMyLocation = useCallback(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocationReady(false)
+      setSelectedRegion('Exterior')
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const region = resolveRegionFromCoordinates(
+          position.coords.latitude,
+          position.coords.longitude,
+        )
+        setSelectedRegion(region)
+        setLocationReady(true)
+        localStorage.setItem('urna_selected_region', region)
+      },
+      () => {
+        setSelectedRegion('Exterior')
+        setLocationReady(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }, [])
+
   // Botão CORRIGE (limpa tudo do cargo atual e permite redigitar)
   const correct = useCallback(() => {
     if (finished || isEndingAnimation) return
@@ -554,31 +579,6 @@ export default function App() {
 
   const totalVotes = records.length
   const regionCounts = brazilRegionSummary(records)
-
-  const handleUseMyLocation = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocationReady(false)
-      setSelectedRegion('Exterior')
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const region = resolveRegionFromCoordinates(
-          position.coords.latitude,
-          position.coords.longitude,
-        )
-        setSelectedRegion(region)
-        setLocationReady(true)
-        localStorage.setItem('urna_selected_region', region)
-      },
-      () => {
-        setSelectedRegion('Exterior')
-        setLocationReady(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
-  }, [])
 
   useEffect(() => {
     handleUseMyLocation()
@@ -1109,7 +1109,7 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#eef4ff] text-[#0a1c3b] flex flex-col justify-between">
+    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_#f6faff_0%,_#e3edff_30%,_#bfd1fb_63%,_#dfeaff_100%)] text-[#0a1c3b] flex flex-col justify-between">
       <div className="blue-grid pointer-events-none fixed inset-0" />
 
       {/* Cabeçalho simplificado */}
