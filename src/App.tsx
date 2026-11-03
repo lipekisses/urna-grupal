@@ -1201,15 +1201,17 @@ export default function App() {
               )}
             </button>
 
-            {/* Gerenciar Candidatos */}
-            <button
-              onClick={() => setIsManagerOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
-              title="Gerenciar e cadastrar candidatos"
-            >
-              <span>⚙️</span>
-              <span className="hidden sm:inline">Candidatos</span>
-            </button>
+            {/* Gerenciar Candidatos - visível apenas em área administrativa autenticada */}
+            {backOfficeUnlocked && (
+              <button
+                onClick={() => setIsManagerOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                title="Gerenciar e cadastrar candidatos"
+              >
+                <span>⚙️</span>
+                <span className="hidden sm:inline">Candidatos</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1467,13 +1469,17 @@ export default function App() {
             >
               Ver Apuração Completa ({records.length} votos)
             </button>
-            <span className="text-slate-300">·</span>
-            <button
-              onClick={() => setIsManagerOpen(true)}
-              className="rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
-            >
-              Configurar Chapas
-            </button>
+            {backOfficeUnlocked && (
+              <>
+                <span className="text-slate-300">·</span>
+                <button
+                  onClick={() => setIsManagerOpen(true)}
+                  className="rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
+                >
+                  Configurar Chapas
+                </button>
+              </>
+            )}
           </div>
         </div>
       </footer>
@@ -1489,13 +1495,15 @@ export default function App() {
         initialTab={isBackOfficeView ? 'backoffice' : 'boletim'}
       />
 
-      <CandidateManagerModal
-        isOpen={isManagerOpen}
-        onClose={() => setIsManagerOpen(false)}
-        candidates={candidates}
-        onUpdateCandidates={handleUpdateCandidates}
-        onSelectPreset={handleSelectPreset}
-      />
+      {backOfficeUnlocked && (
+        <CandidateManagerModal
+          isOpen={isManagerOpen}
+          onClose={() => setIsManagerOpen(false)}
+          candidates={candidates}
+          onUpdateCandidates={handleUpdateCandidates}
+          onSelectPreset={handleSelectPreset}
+        />
+      )}
     </main>
   )
 }
