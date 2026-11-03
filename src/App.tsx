@@ -39,29 +39,8 @@ const roleLabels: Record<Role, string> = {
   'vice-presidente': 'Vice-presidente',
 }
 
-const getAliasCandidateForPresident = (baseCandidate?: Candidate): Candidate | undefined => {
-  if (!baseCandidate || baseCandidate.role !== 'presidente' || baseCandidate.number !== '12') {
-    return baseCandidate
-  }
-
-  return {
-    ...baseCandidate,
-    id: 'pres-pedro-cara-legal',
-    name: 'Cara Legal',
-    number: '88',
-    group: 'Cara Legal',
-    photo: './fotos/pedro.png',
-  }
-}
-
 const getCandidateByNumber = (role: Role, digits: string, sourceCandidates: Candidate[]) => {
-  const directCandidate = sourceCandidates.filter((item) => item.role === role).find((item) => item.number === digits)
-
-  if (role === 'presidente' && digits === '12') {
-    return getAliasCandidateForPresident(directCandidate)
-  }
-
-  return directCandidate
+  return sourceCandidates.filter((item) => item.role === role).find((item) => item.number === digits)
 }
 
 const regionOptions: Array<{ value: RegionName; label: string }> = [
@@ -202,6 +181,7 @@ export default function App() {
     }
     return 'Sudeste'
   })
+  const [locationReady, setLocationReady] = useState(false)
 
   const [records, setRecords] = useState<BallotRecord[]>(() => {
     if (typeof window !== 'undefined') {
@@ -319,16 +299,16 @@ export default function App() {
     setFeedbackMsg('')
   }, [finished, isEndingAnimation])
 
-  // Botão BRANCO: desativado nesta eleição
-  const blankVote = useCallback(() => {
-    if (finished || isEndingAnimation) return
-    sounds.playErrorBeep()
-    setFeedbackMsg('🚫 Voto em branco desativado nesta eleição! Você deve escolher um candidato válido.')
-  }, [finished, isEndingAnimation])
-
   // Botão CONFIRMA
   const confirm = useCallback(() => {
     if (finished || isEndingAnimation) return
+
+    if (!locationReady) {
+      sounds.playErrorBeep()
+      setFeedbackMsg('📍 Ative a geolocalização para confirmar o voto.')
+      handleUseMyLocation()
+      return
+    }
 
     if (!isComplete) {
       sounds.playErrorBeep()
@@ -338,7 +318,7 @@ export default function App() {
 
     if (!candidate) {
       sounds.playErrorBeep()
-      setFeedbackMsg('🚫 Voto nulo não é permitido nesta eleição! Aperte CORRIGE e escolha um candidato válido.')
+      setFeedbackMsg('🚫 Candidato não localizado. Aperte CORRIGE e escolha um candidato válido.')
       return
     }
 
@@ -388,10 +368,15 @@ export default function App() {
         } catch {}
 
         setIsEndingAnimation(false)
-        setFinished(true)
+        setRole('presidente')
+        setDigits('')
+        setIsBlank(false)
+        setVotes({})
+        setFinished(false)
+        setFeedbackMsg('')
       })
     }
-  }, [finished, isEndingAnimation, isComplete, candidate, digits, votes, role, records, candidates])
+  }, [finished, isEndingAnimation, isComplete, candidate, digits, votes, role, records, candidates, locationReady, handleUseMyLocation])
 
   const restart = () => {
     sounds.playKeyBeep()
@@ -448,9 +433,6 @@ export default function App() {
       } else if (event.key === 'Enter') {
         event.preventDefault()
         confirm()
-      } else if (event.key.toLowerCase() === 'b' || event.key === ' ') {
-        event.preventDefault()
-        blankVote()
       }
     }
 
@@ -467,7 +449,6 @@ export default function App() {
     typeDigit,
     correct,
     confirm,
-    blankVote,
   ])
 
   // Atualização de candidatos
@@ -574,8 +555,9 @@ export default function App() {
   const totalVotes = records.length
   const regionCounts = brazilRegionSummary(records)
 
-  const handleUseMyLocation = () => {
+  const handleUseMyLocation = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocationReady(false)
       setSelectedRegion('Exterior')
       return
     }
@@ -587,14 +569,20 @@ export default function App() {
           position.coords.longitude,
         )
         setSelectedRegion(region)
+        setLocationReady(true)
         localStorage.setItem('urna_selected_region', region)
       },
       () => {
         setSelectedRegion('Exterior')
+        setLocationReady(false)
       },
       { enableHighAccuracy: true, timeout: 10000 }
     )
-  }
+  }, [])
+
+  useEffect(() => {
+    handleUseMyLocation()
+  }, [handleUseMyLocation])
 
   const backOfficeStats = (['presidente', 'vice-presidente'] as Role[]).map((role) => {
     const roleCandidates = candidates.filter((candidate) => candidate.role === role)
@@ -606,9 +594,7 @@ export default function App() {
             return total
           }
 
-          const sameCandidate =
-            vote.candidate.id === candidate.id ||
-            (candidate.number === '12' && vote.candidate.number === '88' && vote.candidate.name === 'Cara Legal')
+          const sameCandidate = vote.candidate.id === candidate.id
 
           if (sameCandidate) {
             return total + 1
@@ -972,12 +958,6 @@ export default function App() {
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black tracking-[0.2em] text-slate-300 uppercase">Localização ativa</span>
-                  <button
-                    onClick={handleUseMyLocation}
-                    className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-200"
-                  >
-                    Usar minha localização
-                  </button>
                 </div>
 
                 <select
@@ -1180,12 +1160,6 @@ export default function App() {
                 ))}
               </select>
             </div>
-            <button
-              onClick={handleUseMyLocation}
-              className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-[10px] font-black text-cyan-700 hover:bg-cyan-100"
-            >
-              Usar geolocalização
-            </button>
           </div>
 
           <div className="flex items-center gap-2" aria-label="Progresso da votação">
@@ -1204,7 +1178,6 @@ export default function App() {
         </div>
 
         <div className="grid items-start gap-6">
-          {/* Urna Eletrônica */}
           <div className="urna-shell order-1 mx-auto w-full max-w-[920px]">
             <div className="flex items-center justify-between border-b border-[#8da4cd]/45 px-5 py-3.5 sm:px-7">
               <div className="flex items-center gap-3">
@@ -1228,10 +1201,8 @@ export default function App() {
             </div>
 
             <div className="grid gap-5 p-4 sm:p-6 md:grid-cols-[1.28fr_0.72fr] md:gap-6">
-              {/* Tela da Urna */}
               <section className="screen-panel relative overflow-hidden" aria-live="polite">
                 {isEndingAnimation ? (
-                  /* Tela animada clássica de FIM */
                   <div className="flex h-full min-h-[350px] flex-col items-center justify-center text-center animate-fade-in">
                     <div className="mb-2 flex items-center gap-2 text-xs font-bold tracking-widest text-[#2c72df] uppercase animate-pulse">
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
@@ -1244,8 +1215,6 @@ export default function App() {
                       Voto computado com sucesso na urna
                     </p>
                   </div>
-                ) : finished ? (
-                  <FinalScreen votes={votes} restart={restart} />
                 ) : (
                   <VotingScreen
                     role={role}
@@ -1258,7 +1227,6 @@ export default function App() {
                 )}
               </section>
 
-              {/* Teclado da Urna */}
               <section className="keypad-panel select-none" aria-label="Teclado numérico">
                 <div className="mb-3 flex items-center justify-between px-1 text-[8px] font-bold tracking-[0.13em] text-[#8da9d5] uppercase">
                   <span>Digite 2 números</span>
@@ -1276,15 +1244,7 @@ export default function App() {
                   <div />
                   <Key number="0" onClick={() => typeDigit('0')} />
                 </div>
-                <div className="mt-5 grid grid-cols-[0.88fr_1fr_1.12fr] items-end gap-2">
-                  <button
-                    type="button"
-                    className="action-key blank-key opacity-40 cursor-not-allowed text-[8px]"
-                    onClick={blankVote}
-                    title="Voto em branco desativado nesta eleição"
-                  >
-                    Branco 🚫
-                  </button>
+                <div className="mt-5 grid grid-cols-[1fr_1.12fr] items-end gap-2">
                   <button
                     type="button"
                     className="action-key correct-key active:scale-95"
@@ -1312,7 +1272,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Guia Rápido de Candidatos */}
           <aside className="order-2 mx-auto grid w-full max-w-[920px] gap-4 sm:grid-cols-2">
             {(['presidente', 'vice-presidente'] as Role[]).map((candidateRole) => {
               const isCurrentRole = role === candidateRole && !finished
@@ -1515,9 +1474,7 @@ function VotingScreen({
       )}
 
       <div className="my-3 flex flex-1 items-end">
-        {isBlank ? (
-          <VoteMessage title="Voto em branco" />
-        ) : candidate ? (
+        {candidate ? (
           <div className="flex w-full items-end gap-4 animate-fade-in">
             <img
               src={candidate.photo}
@@ -1550,9 +1507,6 @@ function VotingScreen({
         <p>
           Aperte a tecla: <b className="text-emerald-700">VERDE</b> para CONFIRMAR CANDIDATO ·{' '}
           <b className="text-amber-700">LARANJA</b> para CORRIGIR
-        </p>
-        <p className="text-[8px] text-rose-600 font-extrabold mt-0.5 uppercase tracking-wider">
-          🚫 Votos em branco e nulos estão desativados nesta eleição. O voto em um candidato é obrigatório.
         </p>
       </div>
     </div>
