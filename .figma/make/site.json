@@ -1,0 +1,11 @@
+{
+  "title": "Urna Eletrônica - Simulador de Votação Oficial",
+  "description": "Simule uma urna eletrônica brasileira e pratique a escolha de um candidato usando dois números, com uma experiência simples e interativa.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

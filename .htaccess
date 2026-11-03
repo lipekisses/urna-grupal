@@ -1,0 +1,3 @@
+# Configuração Apache para XAMPP
+# Abre a versão compilada e funcional da Urna Eletrônica diretamente
+DirectoryIndex dist/index.html index.php index.html
