@@ -8,7 +8,8 @@ export const defaultCandidates: Candidate[] = [
     number: '70',
     role: 'presidente',
     group: 'Avante Grupal',
-    photo: './fotos/kaio.jpg',
+    photo:
+      'https://conteudo.imguol.com.br/c/esporte/05/2021/01/31/o-momento-do-gol-de-breno-lopes-que-deu-o-titulo-da-libertadores-para-o-palmeiras-1612117548219_v2_1x1.jpg',
   },
   {
     id: 'pres-pedro',
@@ -16,7 +17,8 @@ export const defaultCandidates: Candidate[] = [
     number: '12',
     role: 'presidente',
     group: 'Partido Comunista do Grupal',
-    photo: './fotos/pedro.png',
+    photo:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Hitler_portrait_crop.jpg/960px-Hitler_portrait_crop.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=thumbnail',
   },
   {
     id: 'pres-daniel',
@@ -24,7 +26,8 @@ export const defaultCandidates: Candidate[] = [
     number: '69',
     role: 'presidente',
     group: 'Banco Master',
-    photo: './fotos/daniel_vorcaro.jpg',
+    photo:
+      'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/Daniel_Vorcaro_-_2024_%28cropped%29.jpg/250px-Daniel_Vorcaro_-_2024_%28cropped%29.jpg?utm_source=pt.wikipedia.org&utm_campaign=parser&utm_content=thumbnail',
   },
 
   // --- CANDIDATOS A VICE-PRESIDENTE ---
@@ -34,8 +37,7 @@ export const defaultCandidates: Candidate[] = [
     number: '18',
     role: 'vice-presidente',
     group: 'Partido Cachorro Orelha',
-    photo:
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?crop=faces&fit=crop&w=500&h=620&q=85',
+    photo: 'https://stories.cnnbrasil.com.br/wp-content/uploads/sites/9/2026/04/diniz-tecnico-corinthians.jpg',
   },
   {
     id: 'vice-arthur',
@@ -43,8 +45,7 @@ export const defaultCandidates: Candidate[] = [
     number: '44',
     role: 'vice-presidente',
     group: 'Partido Trabalhista do Grupal',
-    photo:
-      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?crop=faces&fit=crop&w=500&h=620&q=85',
+    photo: 'https://ntvb.tmsimg.com/assets/assets/928962_v9_bc.jpg',
   },
   {
     id: 'vice-toth',
@@ -53,7 +54,7 @@ export const defaultCandidates: Candidate[] = [
     role: 'vice-presidente',
     group: 'Partido Comunista Maoista Santariterrense da Ordem Mundial',
     photo:
-      'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?crop=faces&fit=crop&w=500&h=620&q=85',
+      'https://upload.wikimedia.org/wikipedia/commons/9/9e/Foto_oficial_de_Luiz_In%C3%A1cio_Lula_da_Silva_%28ombros%29_denoise.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=original',
   },
   {
     id: 'vice-auri',
@@ -62,7 +63,7 @@ export const defaultCandidates: Candidate[] = [
     role: 'vice-presidente',
     group: 'Partido Roludo',
     photo:
-      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?crop=faces&fit=crop&w=500&h=620&q=85',
+      'https://upload.wikimedia.org/wikipedia/commons/b/b3/Foto_oficial_do_senador_Fl%C3%A1vio_Bolsonaro_%28v._AgSen%29_%283x4%29.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=original',
   },
   {
     id: 'vice-fatihzin',
