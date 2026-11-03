@@ -245,7 +245,7 @@ export default function App() {
   const [isManagerOpen, setIsManagerOpen] = useState(false)
 
   // Configurações de som e voz
-  const [soundOn, setSoundOn] = useState(true)
+  const [soundOn, setSoundOn] = useState(false)
   const [voiceOn, setVoiceOn] = useState(false)
 
   // Estado da sessão de voto atual
@@ -264,19 +264,12 @@ export default function App() {
   const canConfirm = Boolean(candidate) && isComplete
 
   // Sincroniza som
-  const toggleSound = () => {
-    const next = !soundOn
-    setSoundOn(next)
-    sounds.setSoundEnabled(next)
-    if (next) sounds.playKeyBeep()
-  }
-
-  const toggleVoice = () => {
-    const next = !voiceOn
-    setVoiceOn(next)
-    sounds.setVoiceEnabled(next)
-    if (next) sounds.speak('Audiodescrição ativada')
-  }
+  useEffect(() => {
+    sounds.setSoundEnabled(false)
+    sounds.setVoiceEnabled(false)
+    setSoundOn(false)
+    setVoiceOn(false)
+  }, [])
 
   // Audiodescrição quando digita os 2 números
   useEffect(() => {
@@ -1139,15 +1132,15 @@ export default function App() {
     <main className="min-h-screen overflow-hidden bg-[#eef4ff] text-[#0a1c3b] flex flex-col justify-between">
       <div className="blue-grid pointer-events-none fixed inset-0" />
 
-      {/* Cabeçalho */}
-      <header className="relative z-10 border-b border-[#b9c9e7] bg-white/85 px-4 sm:px-8 backdrop-blur-md">
-        <div className="mx-auto flex h-17 max-w-7xl items-center justify-between">
+      {/* Cabeçalho simplificado */}
+      <header className="relative z-10 border-b border-[#b9c9e7] bg-white/70 px-4 sm:px-8 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="grupal-logo" aria-hidden="true">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0a2c68] text-sm font-black text-white shadow-sm">
               G
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-[0.2em] text-[#54709f] uppercase">
+              <p className="text-[9px] font-black tracking-[0.2em] text-[#54709f] uppercase">
                 Eleição oficial
               </p>
               <p className="text-lg leading-none font-black tracking-[-0.03em] text-[#092863]">
@@ -1155,63 +1148,6 @@ export default function App() {
                 <span className="text-[#2f73df]">.</span>
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Som On/Off */}
-            <button
-              onClick={toggleSound}
-              className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-black shadow-sm transition duration-200 hover:-translate-y-0.5 ${
-                soundOn
-                  ? 'border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 hover:from-blue-100 hover:to-indigo-100'
-                  : 'border-slate-200 bg-white text-slate-400 hover:text-slate-600'
-              }`}
-              title="Ativar/Desativar Som da Urna"
-            >
-              <span>{soundOn ? '🔊' : '🔇'}</span>
-              <span className="hidden sm:inline">Som</span>
-            </button>
-
-            {/* Voz On/Off */}
-            <button
-              onClick={toggleVoice}
-              className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-black shadow-sm transition duration-200 hover:-translate-y-0.5 ${
-                voiceOn
-                  ? 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 hover:from-emerald-100 hover:to-teal-100'
-                  : 'border-slate-200 bg-white text-slate-400 hover:text-slate-600'
-              }`}
-              title="Ativar/Desativar Audiodescrição por Voz"
-            >
-              <span>🗣️</span>
-              <span className="hidden sm:inline">Voz</span>
-            </button>
-
-            {/* Boletim de Urna */}
-            <button
-              onClick={() => setIsBoletimOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-[#8ea9d5] bg-gradient-to-r from-white to-blue-50 px-3 py-1.5 text-xs font-black text-[#143e80] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
-              title="Ver Boletim de Urna e Apuração dos Votos"
-            >
-              <span>📊</span>
-              <span>Boletim de Urna</span>
-              {records.length > 0 && (
-                <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[10px] text-white font-extrabold">
-                  {records.length}
-                </span>
-              )}
-            </button>
-
-            {/* Gerenciar Candidatos - visível apenas em área administrativa autenticada */}
-            {backOfficeUnlocked && (
-              <button
-                onClick={() => setIsManagerOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
-                title="Gerenciar e cadastrar candidatos"
-              >
-                <span>⚙️</span>
-                <span className="hidden sm:inline">Candidatos</span>
-              </button>
-            )}
           </div>
         </div>
       </header>
@@ -1458,29 +1394,10 @@ export default function App() {
 
       {/* Rodapé Informativo */}
       <footer className="relative z-10 border-t border-[#c6d5ec] bg-white/60 py-3 px-4 text-center text-xs text-[#58729c]">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-2">
           <span>
             Urna Eletrônica Interativa · Simulador educacional e oficial de eleições
           </span>
-          <div className="flex items-center gap-3 text-[11px] font-semibold">
-            <button
-              onClick={handleOpenBackOffice}
-              className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-black text-blue-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50"
-            >
-              Ver Apuração Completa ({records.length} votos)
-            </button>
-            {backOfficeUnlocked && (
-              <>
-                <span className="text-slate-300">·</span>
-                <button
-                  onClick={() => setIsManagerOpen(true)}
-                  className="rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-black text-indigo-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50"
-                >
-                  Configurar Chapas
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </footer>
 
