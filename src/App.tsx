@@ -12,6 +12,39 @@ const BACKOFFICE_PASSWORD = 'admin123'
 const BACKOFFICE_ACCESS_KEY = 'urna_backoffice_access'
 const BACKOFFICE_PRESENCE_KEY = 'urna_backoffice_presence'
 const BACKOFFICE_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+const TOKENS_STORAGE_KEY = 'urna_voter_tokens'
+
+// Tipos de token de eleitor
+type VoterToken = {
+  token: string
+  label: string
+  used: boolean
+  usedAt?: number
+}
+
+const generateToken = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let result = ''
+  for (let i = 0; i < 8; i++) {
+    if (i === 4) result += '-'
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return result
+}
+
+const loadTokens = (): VoterToken[] => {
+  try {
+    const saved = localStorage.getItem(TOKENS_STORAGE_KEY)
+    if (saved) return JSON.parse(saved)
+  } catch {}
+  return []
+}
+
+const saveTokens = (tokens: VoterToken[]) => {
+  try {
+    localStorage.setItem(TOKENS_STORAGE_KEY, JSON.stringify(tokens))
+  } catch {}
+}
 
 const getCandidatesSignature = () =>
   JSON.stringify(
@@ -229,13 +262,20 @@ export default function App() {
   const [voiceOn, setVoiceOn] = useState(false)
 
   // Estado da sessão de voto atual
-  const [role, setRole] = useState<Role>('presidente')
+  const [role, setRole] = useState<Role>('vice-presidente')
   const [digits, setDigits] = useState('')
   const [isBlank, setIsBlank] = useState(false)
   const [votes, setVotes] = useState<Partial<Record<Role, Vote>>>({})
   const [isEndingAnimation, setIsEndingAnimation] = useState(false)
   const [finished, setFinished] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState('')
+
+  // Sistema de mesário / tokens
+  const [tokens, setTokens] = useState<VoterToken[]>(() => loadTokens())
+  const [mesarioPhase, setMesarioPhase] = useState<'waiting' | 'voting'>('waiting')
+  const [tokenInput, setTokenInput] = useState('')
+  const [tokenError, setTokenError] = useState('')
+  const [currentVoterToken, setCurrentVoterToken] = useState<string | null>(null)
 
   const roleCandidates = candidates.filter((item) => item.role === role)
   const candidate = getCandidateByNumber(role, digits, candidates)
@@ -358,20 +398,19 @@ export default function App() {
     const updatedVotes = { ...votes, [role]: currentVote }
     setVotes(updatedVotes)
 
-    if (role === 'presidente') {
+    if (role === 'vice-presidente') {
       sounds.playStepConfirm()
-      setRole('vice-presidente')
+      setRole('presidente')
       setDigits('')
       setIsBlank(false)
     } else {
-      // Voto final (Vice-presidente) -> Inicia animação oficial FIM e som da urna
+      // Voto final (Presidente) -> Inicia animação oficial FIM e som da urna
       setIsEndingAnimation(true)
       sounds.playUrnaFim().then(() => {
         // Registra o voto completo no histórico permanente
-        const presidentCandidate =
-          updatedVotes.presidente?.candidate ??
-          getCandidateByNumber('presidente', '12', candidates) ??
-          candidates.find((candidate) => candidate.role === 'presidente')
+        const viceCandidate =
+          updatedVotes['vice-presidente']?.candidate ??
+          candidates.find((candidate) => candidate.role === 'vice-presidente')
 
         const newRecord: BallotRecord = {
           id: Date.now().toString(),
@@ -379,12 +418,12 @@ export default function App() {
           dateString: new Date().toLocaleString('pt-BR'),
           region: selectedRegion,
           source: 'manual',
-          presidente: {
+          presidente: currentVote,
+          vicePresidente: {
             kind: 'candidate',
-            number: updatedVotes.presidente?.number ?? presidentCandidate?.number ?? '12',
-            candidate: presidentCandidate,
+            number: updatedVotes['vice-presidente']?.number ?? viceCandidate?.number ?? '',
+            candidate: viceCandidate,
           },
-          vicePresidente: currentVote,
         }
         const newRecords = [newRecord, ...records]
         setRecords(newRecords)
@@ -392,25 +431,70 @@ export default function App() {
           localStorage.setItem('urna_votes_records', JSON.stringify(newRecords))
         } catch {}
 
+        // Marca o token como usado
+        if (currentVoterToken) {
+          const updatedTokens = tokens.map((t) =>
+            t.token === currentVoterToken ? { ...t, used: true, usedAt: Date.now() } : t
+          )
+          setTokens(updatedTokens)
+          saveTokens(updatedTokens)
+        }
+
         setIsEndingAnimation(false)
-        setRole('presidente')
+        setRole('vice-presidente')
         setDigits('')
         setIsBlank(false)
         setVotes({})
         setFinished(false)
         setFeedbackMsg('')
+        // Volta para a tela de mesário para o próximo eleitor
+        setMesarioPhase('waiting')
+        setTokenInput('')
+        setTokenError('')
+        setCurrentVoterToken(null)
       })
     }
-  }, [finished, isEndingAnimation, isComplete, candidate, digits, votes, role, records, candidates, locationReady, handleUseMyLocation])
+  }, [finished, isEndingAnimation, isComplete, candidate, digits, votes, role, records, candidates, locationReady, handleUseMyLocation, currentVoterToken, tokens])
+
+  // Validação do token do título de eleitor
+  const handleTokenSubmit = useCallback((event: React.FormEvent) => {
+    event.preventDefault()
+    const normalized = tokenInput.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '')
+    if (!normalized) {
+      setTokenError('Por favor, digite o token do seu título de eleitor.')
+      return
+    }
+
+    const currentTokens = loadTokens()
+    const found = currentTokens.find((t) => t.token === normalized)
+
+    if (!found) {
+      setTokenError('Token não encontrado. Verifique e tente novamente.')
+      return
+    }
+    if (found.used) {
+      setTokenError('Este título já foi utilizado para votar nesta eleição.')
+      return
+    }
+
+    // Token válido — libera a votação
+    setCurrentVoterToken(normalized)
+    setTokenError('')
+    setMesarioPhase('voting')
+  }, [tokenInput])
 
   const restart = () => {
     sounds.playKeyBeep()
-    setRole('presidente')
+    setRole('vice-presidente')
     setDigits('')
     setIsBlank(false)
     setVotes({})
     setFinished(false)
     setFeedbackMsg('')
+    setMesarioPhase('waiting')
+    setTokenInput('')
+    setTokenError('')
+    setCurrentVoterToken(null)
   }
 
   // Teclado físico do computador (números, Numpad, Enter, Backspace, Esc/Delete, B)
@@ -1103,7 +1187,120 @@ export default function App() {
               </table>
             </div>
           </section>
+
+          {/* Painel de Tokens (Títulos de Eleitor) */}
+          <section className="mt-8 rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_24px_60px_rgba(148,163,184,0.12)] backdrop-blur-md">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black tracking-[0.28em] text-slate-500 uppercase">Mesário</p>
+                <h3 className="mt-1 text-2xl font-black tracking-[-0.05em] text-slate-900">Títulos de Eleitor</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Gere tokens e entregue a cada eleitor. Cada token é de uso único.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const newToken: VoterToken = {
+                      token: generateToken(),
+                      label: `Eleitor ${tokens.length + 1}`,
+                      used: false,
+                    }
+                    const updated = [newToken, ...tokens]
+                    setTokens(updated)
+                    saveTokens(updated)
+                  }}
+                  className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_24px_rgba(59,130,246,0.35)] transition hover:-translate-y-0.5"
+                >
+                  + Gerar Token
+                </button>
+                <button
+                  onClick={() => {
+                    const batch = Array.from({ length: 10 }, (_, i) => ({
+                      token: generateToken(),
+                      label: `Eleitor ${tokens.length + i + 1}`,
+                      used: false,
+                    }))
+                    const updated = [...batch, ...tokens]
+                    setTokens(updated)
+                    saveTokens(updated)
+                  }}
+                  className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-black text-indigo-700 transition hover:-translate-y-0.5"
+                >
+                  + Gerar 10
+                </button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm('Apagar todos os tokens? Esta ação não pode ser desfeita.')) return
+                    setTokens([])
+                    saveTokens([])
+                  }}
+                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-600 transition hover:-translate-y-0.5"
+                >
+                  Limpar tudo
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-3 flex gap-4 text-sm">
+              <span className="font-bold text-slate-700">Total: <b>{tokens.length}</b></span>
+              <span className="font-bold text-emerald-700">Usados: <b>{tokens.filter((t) => t.used).length}</b></span>
+              <span className="font-bold text-blue-700">Disponíveis: <b>{tokens.filter((t) => !t.used).length}</b></span>
+            </div>
+
+            {tokens.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 text-sm">
+                Nenhum token gerado. Clique em <b>+ Gerar Token</b> para começar.
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-h-96 overflow-y-auto pr-1">
+                {tokens.map((t) => (
+                  <div
+                    key={t.token}
+                    className={`flex items-center justify-between rounded-2xl border p-3 ${
+                      t.used
+                        ? 'border-slate-200 bg-slate-50 opacity-60'
+                        : 'border-blue-200 bg-blue-50'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className={`font-mono text-base font-black tracking-widest ${t.used ? 'text-slate-400 line-through' : 'text-blue-800'}`}>
+                        {t.token}
+                      </p>
+                      <p className="mt-0.5 truncate text-[10px] text-slate-500">{t.label}</p>
+                      {t.used && t.usedAt && (
+                        <p className="text-[10px] text-rose-500">
+                          Usado em {new Date(t.usedAt).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
+                      t.used ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {t.used ? 'Usado' : 'OK'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
         </div>
+      </main>
+    )
+  }
+
+  if (mesarioPhase === 'waiting' && !isBackOfficeView) {
+    return (
+      <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_#f6faff_0%,_#e3edff_30%,_#bfd1fb_63%,_#dfeaff_100%)] text-[#0a1c3b]">
+        <div className="blue-grid pointer-events-none fixed inset-0" />
+        <MesarioScreen
+          tokenInput={tokenInput}
+          tokenError={tokenError}
+          onTokenChange={(v) => { setTokenInput(v); setTokenError('') }}
+          onSubmit={handleTokenSubmit}
+          electionTitle={electionTitle}
+        />
       </main>
     )
   }
@@ -1380,7 +1577,108 @@ export default function App() {
           onSelectPreset={handleSelectPreset}
         />
       )}
+
     </main>
+  )
+}
+
+// ─── Tela de Mesário ────────────────────────────────────────────────────────
+function MesarioScreen({
+  tokenInput,
+  tokenError,
+  onTokenChange,
+  onSubmit,
+  electionTitle,
+}: {
+  tokenInput: string
+  tokenError: string
+  onTokenChange: (value: string) => void
+  onSubmit: (event: React.FormEvent) => void
+  electionTitle: string
+}) {
+  return (
+    <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-10">
+      {/* Carimbo decorativo de fundo */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.04]">
+        <svg viewBox="0 0 200 200" className="w-[480px]" fill="none">
+          <circle cx="100" cy="100" r="95" stroke="#0a2c68" strokeWidth="6" />
+          <circle cx="100" cy="100" r="78" stroke="#0a2c68" strokeWidth="2" strokeDasharray="4 3" />
+          <text x="100" y="88" textAnchor="middle" fontWeight="900" fontSize="13" fill="#0a2c68" fontFamily="sans-serif">REPÚBLICA FEDERATIVA</text>
+          <text x="100" y="105" textAnchor="middle" fontWeight="900" fontSize="13" fill="#0a2c68" fontFamily="sans-serif">DO BRASIL</text>
+          <text x="100" y="122" textAnchor="middle" fontWeight="700" fontSize="10" fill="#0a2c68" fontFamily="sans-serif">TÍTULO ELEITORAL</text>
+        </svg>
+      </div>
+
+      <div className="relative w-full max-w-sm">
+        {/* Badge do mesário */}
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0a2c68] shadow-lg">
+            <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[9px] font-black tracking-[0.2em] text-[#54709f] uppercase">Seção Eleitoral</p>
+            <p className="text-sm font-black text-[#092863]">{electionTitle}</p>
+          </div>
+        </div>
+
+        {/* Card principal */}
+        <div className="rounded-[28px] border border-white/70 bg-white/85 p-7 shadow-[0_32px_80px_rgba(37,99,235,0.14)] backdrop-blur-xl">
+          {/* Avatar do mesário */}
+          <div className="mb-5 flex flex-col items-center text-center">
+            <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-blue-100 to-indigo-200 ring-4 ring-white shadow-md">
+              <svg className="h-8 w-8 text-[#1e3f7a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-[10px] font-bold tracking-[0.18em] text-[#5c7ba0] uppercase">Mesário</p>
+            <h2 className="mt-1 text-xl font-black leading-tight text-[#0a2a62]">
+              Por favor, apresente seu<br />título de eleitor
+            </h2>
+            <p className="mt-2 text-xs leading-5 text-[#6880a0]">
+              Digite o <b>código do token</b> que você recebeu do mesário para liberar o acesso à urna.
+            </p>
+          </div>
+
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-[10px] font-black tracking-[0.18em] text-[#4a6080] uppercase">
+                Token do Título
+              </label>
+              <input
+                type="text"
+                value={tokenInput}
+                onChange={(e) => onTokenChange(e.target.value)}
+                placeholder="Ex: ABCD-1234"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center font-mono text-xl font-black tracking-[0.3em] text-[#0a2c68] outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 uppercase placeholder:text-slate-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
+                maxLength={9}
+              />
+            </div>
+
+            {tokenError && (
+              <div className="animate-fade-in rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-center text-sm font-semibold text-rose-700">
+                {tokenError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-sm font-black text-white shadow-[0_14px_32px_rgba(59,130,246,0.38)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(59,130,246,0.44)] active:scale-[0.98]"
+            >
+              Validar e Votar →
+            </button>
+          </form>
+        </div>
+
+        <p className="mt-4 text-center text-[10px] text-[#7a90b4]">
+          Acesso controlado · Tokens gerados pelo mesário no painel de administração
+        </p>
+      </div>
+    </div>
   )
 }
 
