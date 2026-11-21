@@ -1,4 +1,5 @@
 import type { Candidate, ElectionPreset } from './types'
+import { tothPhoto, fatihzinPhoto } from './photos'
 
 export const defaultCandidates: Candidate[] = [
   // --- CANDIDATOS A PRESIDENTE ---
@@ -37,7 +38,7 @@ export const defaultCandidates: Candidate[] = [
     number: '51',
     role: 'vice-presidente',
     group: 'Partido Comunista Maoista Santariterrense da Ordem Mundial',
-    photo: '/toth.jpg',
+    photo: tothPhoto,
   },
   {
     id: 'vice-fatihzin',
@@ -45,7 +46,7 @@ export const defaultCandidates: Candidate[] = [
     number: '77',
     role: 'vice-presidente',
     group: 'Partido Lázaro Barbosa',
-    photo: '/fatihzin.jpg',
+    photo: fatihzinPhoto,
   },
 ]
 
