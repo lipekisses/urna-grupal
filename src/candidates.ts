@@ -33,12 +33,11 @@ export const defaultCandidates: Candidate[] = [
   // --- CANDIDATOS A VICE-PRESIDENTE ---
   {
     id: 'vice-toth',
-    name: 'Toth',
+    name: 'Pedro Toth',
     number: '51',
     role: 'vice-presidente',
     group: 'Partido Comunista Maoista Santariterrense da Ordem Mundial',
-    photo:
-      'https://upload.wikimedia.org/wikipedia/commons/9/9e/Foto_oficial_de_Luiz_In%C3%A1cio_Lula_da_Silva_%28ombros%29_denoise.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=original',
+    photo: '/toth.jpg',
   },
   {
     id: 'vice-fatihzin',

@@ -7,7 +7,7 @@ import { CandidateManagerModal } from './components/CandidateManagerModal'
 import { BackOfficeDashboard } from './components/BackOfficeDashboard'
 
 const keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-const CANDIDATES_STORAGE_KEY = 'urna_candidates_list_v8'
+const CANDIDATES_STORAGE_KEY = 'urna_candidates_list_v9'
 const CANDIDATES_SIGNATURE_KEY = 'urna_candidates_signature'
 const BACKOFFICE_PASSWORD = 'admin123'
 const BACKOFFICE_ACCESS_KEY = 'urna_backoffice_access'
