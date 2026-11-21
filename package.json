@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "format": "oxfmt"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
