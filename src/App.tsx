@@ -4,9 +4,10 @@ import { defaultCandidates } from './candidates'
 import { sounds } from './sound'
 import { BoletimModal } from './components/BoletimModal'
 import { CandidateManagerModal } from './components/CandidateManagerModal'
+import { BackOfficeDashboard } from './components/BackOfficeDashboard'
 
 const keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
-const CANDIDATES_STORAGE_KEY = 'urna_candidates_list_v6'
+const CANDIDATES_STORAGE_KEY = 'urna_candidates_list_v7'
 const CANDIDATES_SIGNATURE_KEY = 'urna_candidates_signature'
 const BACKOFFICE_PASSWORD = 'admin123'
 const BACKOFFICE_ACCESS_KEY = 'urna_backoffice_access'
@@ -84,18 +85,6 @@ const regionOptions: Array<{ value: RegionName; label: string }> = [
   { value: 'Sul', label: 'Sul' },
   { value: 'Exterior', label: 'Exterior' },
 ]
-
-const resolveRegionFromCoordinates = (lat: number, lng: number): RegionName => {
-  const inBrazil = lat >= -34 && lat <= 7 && lng >= -74 && lng <= -30
-
-  if (!inBrazil) return 'Exterior'
-
-  if (lat < -22) return 'Sul'
-  if (lat < -15) return 'Sudeste'
-  if (lat < -8) return 'Centro-Oeste'
-  if (lat < 0) return 'Nordeste'
-  return 'Norte'
-}
 
 const brazilRegionSummary = (records: BallotRecord[]) => {
   const map: Record<RegionName, number> = {
@@ -214,8 +203,6 @@ export default function App() {
     }
     return 'Sudeste'
   })
-  const [locationReady, setLocationReady] = useState(false)
-
   const [records, setRecords] = useState<BallotRecord[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('urna_votes_records')
@@ -276,6 +263,8 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState('')
   const [tokenError, setTokenError] = useState('')
   const [currentVoterToken, setCurrentVoterToken] = useState<string | null>(null)
+  const [isRegionModalOpen, setIsRegionModalOpen] = useState(false)
+  const [regionDraft, setRegionDraft] = useState<RegionName | ''>('')
 
   const roleCandidates = candidates.filter((item) => item.role === role)
   const candidate = getCandidateByNumber(role, digits, candidates)
@@ -330,31 +319,6 @@ export default function App() {
     [finished, isEndingAnimation, isBlank, digits]
   )
 
-  const handleUseMyLocation = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocationReady(false)
-      setSelectedRegion('Exterior')
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const region = resolveRegionFromCoordinates(
-          position.coords.latitude,
-          position.coords.longitude,
-        )
-        setSelectedRegion(region)
-        setLocationReady(true)
-        localStorage.setItem('urna_selected_region', region)
-      },
-      () => {
-        setSelectedRegion('Exterior')
-        setLocationReady(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    )
-  }, [])
-
   // Botão CORRIGE (limpa tudo do cargo atual e permite redigitar)
   const correct = useCallback(() => {
     if (finished || isEndingAnimation) return
@@ -366,14 +330,7 @@ export default function App() {
 
   // Botão CONFIRMA
   const confirm = useCallback(() => {
-    if (finished || isEndingAnimation) return
-
-    if (!locationReady) {
-      sounds.playErrorBeep()
-      setFeedbackMsg('📍 Ative a geolocalização para confirmar o voto.')
-      handleUseMyLocation()
-      return
-    }
+    if (finished || isEndingAnimation || isRegionModalOpen) return
 
     if (!isComplete) {
       sounds.playErrorBeep()
@@ -447,6 +404,8 @@ export default function App() {
         setVotes({})
         setFinished(false)
         setFeedbackMsg('')
+        setIsRegionModalOpen(false)
+        setRegionDraft('')
         // Volta para a tela de mesário para o próximo eleitor
         setMesarioPhase('waiting')
         setTokenInput('')
@@ -454,7 +413,7 @@ export default function App() {
         setCurrentVoterToken(null)
       })
     }
-  }, [finished, isEndingAnimation, isComplete, candidate, digits, votes, role, records, candidates, locationReady, handleUseMyLocation, currentVoterToken, tokens])
+  }, [finished, isEndingAnimation, isRegionModalOpen, isComplete, candidate, digits, votes, role, records, candidates, selectedRegion, currentVoterToken, tokens])
 
   // Validação do token do título de eleitor
   const handleTokenSubmit = useCallback((event: React.FormEvent) => {
@@ -480,8 +439,25 @@ export default function App() {
     // Token válido — libera a votação
     setCurrentVoterToken(normalized)
     setTokenError('')
+    setRegionDraft('')
     setMesarioPhase('voting')
+    setIsRegionModalOpen(true)
   }, [tokenInput])
+
+  const handleRegionConfirm = () => {
+    if (!regionDraft) return
+    setSelectedRegion(regionDraft)
+    localStorage.setItem('urna_selected_region', regionDraft)
+    setIsRegionModalOpen(false)
+  }
+
+  const handleRegionBack = () => {
+    setIsRegionModalOpen(false)
+    setRegionDraft('')
+    setCurrentVoterToken(null)
+    setTokenInput('')
+    setMesarioPhase('waiting')
+  }
 
   const restart = () => {
     sounds.playKeyBeep()
@@ -495,13 +471,15 @@ export default function App() {
     setTokenInput('')
     setTokenError('')
     setCurrentVoterToken(null)
+    setRegionDraft('')
+    setIsRegionModalOpen(false)
   }
 
   // Teclado físico do computador (números, Numpad, Enter, Backspace, Esc/Delete, B)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       // Se algum modal estiver aberto ou o foco estiver em campo de texto, ignora
-      if (isBoletimOpen || isManagerOpen) return
+      if (isBoletimOpen || isManagerOpen || isRegionModalOpen) return
       const target = event.target as HTMLElement | null
       if (
         target &&
@@ -550,6 +528,7 @@ export default function App() {
   }, [
     isBoletimOpen,
     isManagerOpen,
+    isRegionModalOpen,
     digits,
     isBlank,
     finished,
@@ -664,11 +643,7 @@ export default function App() {
   const totalVotes = records.length
   const regionCounts = brazilRegionSummary(records)
 
-  useEffect(() => {
-    handleUseMyLocation()
-  }, [handleUseMyLocation])
-
-  const backOfficeStats = (['presidente', 'vice-presidente'] as Role[]).map((role) => {
+  const backOfficeStats = (['vice-presidente', 'presidente'] as Role[]).map((role) => {
     const roleCandidates = candidates.filter((candidate) => candidate.role === role)
     const totals = roleCandidates
       .map((candidate) => {
@@ -701,60 +676,9 @@ export default function App() {
     }
   })
 
-  const tableRoleFilter = useState<'all' | Role>('all')
-  const [roleFilter, setRoleFilter] = tableRoleFilter
-  const [searchTerm, setSearchTerm] = useState('')
-
-  const voteRows = records
-    .map((record, index) => {
-      const presidency = record.presidente
-      const vice = record.vicePresidente
-      return {
-        id: record.id,
-        index: records.length - index,
-        timestamp: record.timestamp,
-        dateString: record.dateString,
-        role: 'presidente' as const,
-        number: presidency.kind === 'candidate' ? presidency.number : '—',
-        name: presidency.kind === 'candidate' ? presidency.candidate?.name ?? '—' : 'Branco / Nulo',
-        viceName: vice.kind === 'candidate' ? vice.candidate?.name ?? '—' : 'Branco / Nulo',
-        viceNumber: vice.kind === 'candidate' ? vice.number : '—',
-      }
-    })
-    .map((row) => ({
-      ...row,
-      role: 'presidente' as const,
-    }))
-
-  const filteredRows = voteRows.filter((row) => {
-    const matchesRole = roleFilter === 'all' || roleFilter === 'presidente'
-    const matchesSearch =
-      searchTerm.trim() === '' ||
-      row.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.viceName.toLowerCase().includes(searchTerm.toLowerCase())
-
-    return matchesRole && matchesSearch
-  })
-
-  const hourlyVotes = Array.from({ length: 24 }, (_, hour) => {
-    const count = records.filter((record) => {
-      const date = new Date(record.timestamp)
-      return date.getHours() === hour
-    }).length
-
-    return {
-      hour,
-      label: `${String(hour).padStart(2, '0')}:00`,
-      count,
-    }
-  })
-
-  const maxHourlyVotes = Math.max(...hourlyVotes.map((item) => item.count), 1)
-
   const exportCsv = () => {
     const rows = [
-      ['ID', 'Data', 'Hora', 'Presidente', 'Número', 'Vice', 'Número Vice'],
+      ['ID', 'Data', 'Hora', 'Região', 'Vice-presidente', 'Nº vice', 'Presidente', 'Nº presidente'],
       ...records.map((record) => {
         const president = record.presidente
         const vice = record.vicePresidente
@@ -763,10 +687,11 @@ export default function App() {
           record.id,
           record.dateString,
           new Date(record.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          president.kind === 'candidate' ? president.candidate?.name ?? '—' : 'Branco / Nulo',
-          president.kind === 'candidate' ? president.number : '—',
+          record.region ?? 'Exterior',
           vice.kind === 'candidate' ? vice.candidate?.name ?? '—' : 'Branco / Nulo',
           vice.kind === 'candidate' ? vice.number : '—',
+          president.kind === 'candidate' ? president.candidate?.name ?? '—' : 'Branco / Nulo',
+          president.kind === 'candidate' ? president.number : '—',
         ]
       }),
     ]
@@ -775,7 +700,7 @@ export default function App() {
       .map((cols) => cols.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
       .join('\n')
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = 'votos_backoffice.csv'
@@ -787,42 +712,42 @@ export default function App() {
 
   if (isBackOfficeView && !backOfficeUnlocked) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.32),_transparent_22%),linear-gradient(135deg,#f8fbff_0%,#eef3ff_38%,#e7edff_100%)] text-slate-800">
-        <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-4 py-8">
+      <main className="min-h-screen bg-[#f3f5f9] px-4 text-slate-800">
+        <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center py-8">
           <form
             onSubmit={handleBackOfficeLogin}
-            className="w-full rounded-[28px] border border-white/60 bg-white/80 p-6 shadow-[0_24px_60px_rgba(37,99,235,0.12)] backdrop-blur-xl"
+            className="w-full rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_24px_70px_rgba(15,23,42,0.10)] sm:p-9"
           >
-            <p className="text-[10px] font-black tracking-[0.28em] text-blue-600 uppercase">Acesso restrito</p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-slate-900">Back office</h1>
-            <p className="mt-2 text-sm text-slate-500">Entre com a senha para ver a apuração e os usuários ativos.</p>
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#172844] text-lg font-black text-white shadow-lg shadow-slate-900/15">U</div>
+            <p className="text-[10px] font-black tracking-[0.2em] text-blue-700 uppercase">Acesso administrativo</p>
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.05em] text-slate-900">Back office</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Entre para acompanhar a apuração, os registros e os títulos eleitorais.</p>
 
-            <label className="mt-6 block text-xs font-black tracking-[0.18em] text-slate-500 uppercase">
+            <label htmlFor="backoffice-password" className="mt-6 block text-xs font-bold text-slate-700">
               Senha
             </label>
             <input
+              id="backoffice-password"
               type="password"
               value={backOfficePassword}
               onChange={(event) => setBackOfficePassword(event.target.value)}
               placeholder="Digite a senha"
-              className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-800 outline-none focus:border-blue-500"
+              autoComplete="current-password"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50"
             />
 
             {backOfficePasswordError && (
-              <p className="mt-3 text-sm font-semibold text-rose-600">{backOfficePasswordError}</p>
+              <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{backOfficePasswordError}</p>
             )}
 
             <button
               type="submit"
-              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-black text-white shadow-[0_14px_28px_rgba(59,130,246,0.35)] transition hover:-translate-y-0.5"
+              className="mt-5 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-blue-800 focus-visible:outline-blue-500"
             >
               Acessar painel
             </button>
-
-            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-700">
-              Senha padrão: <span className="font-black">{BACKOFFICE_PASSWORD}</span>
-            </div>
           </form>
+          <button onClick={() => navigateTo('/')} className="mt-5 text-sm font-semibold text-slate-500 transition hover:text-blue-700">← Voltar para a urna</button>
         </div>
       </main>
     )
@@ -830,466 +755,52 @@ export default function App() {
 
   if (isBackOfficeView) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(96,165,250,0.32),_transparent_22%),linear-gradient(135deg,#f8fbff_0%,#eef3ff_38%,#e7edff_100%)] text-slate-800">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <header className="mb-8 rounded-[30px] border border-white/60 bg-white/70 p-5 shadow-[0_24px_60px_rgba(37,99,235,0.12)] backdrop-blur-xl">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-[10px] font-black tracking-[0.28em] text-blue-600 uppercase">
-                  Back office eleitoral
-                </p>
-                <h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-slate-900 md:text-4xl">
-                  {electionTitle}
-                </h1>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => navigateTo('/')}
-                  className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_24px_rgba(59,130,246,0.35)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_28px_rgba(59,130,246,0.4)] active:scale-[0.98]"
-                >
-                  Voltar para a urna
-                </button>
-                <button
-                  onClick={exportCsv}
-                  className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_24px_rgba(16,185,129,0.28)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_28px_rgba(16,185,129,0.32)] active:scale-[0.98]"
-                >
-                  Exportar CSV
-                </button>
-                <button
-                  onClick={() => handleClearVotes()}
-                  className="rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-500 to-red-500 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_24px_rgba(244,63,94,0.28)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_28px_rgba(244,63,94,0.34)] active:scale-[0.98]"
-                >
-                  Zerar votos
-                </button>
-                <button
-                  onClick={handleBackOfficeLogout}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-[0_10px_18px_rgba(148,163,184,0.15)] transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50"
-                >
-                  Sair do back office
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <section className="mb-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-[28px] border border-slate-900/10 bg-slate-900 p-5 text-white shadow-[0_20px_44px_rgba(15,23,42,0.28)]">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold tracking-[0.24em] text-slate-300 uppercase">Total</p>
-                <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-black tracking-[0.18em] text-slate-200 uppercase">
-                  Votos
-                </span>
-              </div>
-              <p className="mt-6 text-4xl font-black tracking-[-0.06em]">{totalVotes}</p>
-              <p className="mt-2 text-sm text-slate-300">Eleitorado contabilizado nesta sessão</p>
-            </div>
-
-            <div className="rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-500 to-teal-500 p-5 text-white shadow-[0_20px_44px_rgba(16,185,129,0.22)]">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold tracking-[0.24em] text-emerald-100 uppercase">Usuários</p>
-                <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-black tracking-[0.18em] text-emerald-50 uppercase">
-                  Online
-                </span>
-              </div>
-              <p className="mt-6 text-4xl font-black tracking-[-0.06em]">{activeBackOfficeUsers}</p>
-              <p className="mt-2 text-sm text-emerald-50">Usuários ativos no painel neste momento</p>
-            </div>
-
-            {backOfficeStats.map(({ role, winner }) => {
-              const leaderName = winner?.candidate.name ?? 'Sem liderança'
-              const leaderPercent = winner ? winner.percent : 0
-              const ringStyle = {
-                background: `conic-gradient(#2563eb 0 ${leaderPercent}%, rgba(148,163,184,0.18) ${leaderPercent}% 100%)`,
-              }
-
-              return (
-                <div
-                  key={role}
-                  className="rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_18px_36px_rgba(148,163,184,0.14)] backdrop-blur-md"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-bold tracking-[0.22em] text-slate-500 uppercase">{roleLabels[role]}</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">{leaderName}</p>
-                    </div>
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-blue-100 bg-blue-50" style={ringStyle}>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[10px] font-black text-blue-700">
-                        {leaderPercent.toFixed(0)}%
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-sm text-slate-500">
-                    {winner ? `${winner.count} votos · ${winner.percent.toFixed(1)}%` : 'Sem apuração ainda'}
-                  </p>
-                </div>
-              )
-            })}
-          </section>
-
-          <section className="mb-8 grid gap-4 md:grid-cols-3">
-            {regionCounts.map(({ region, count }) => (
-              <div key={region} className="rounded-[24px] border border-white/60 bg-white/70 p-4 shadow-[0_16px_30px_rgba(148,163,184,0.12)] backdrop-blur-md">
-                <p className="text-[10px] font-black tracking-[0.2em] text-slate-500 uppercase">{region}</p>
-                <p className="mt-3 text-3xl font-black tracking-[-0.05em] text-slate-900">{count}</p>
-                <p className="mt-1 text-xs text-slate-500">votos registrados</p>
-              </div>
-            ))}
-          </section>
-
-          <section className="mb-8 rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_24px_60px_rgba(148,163,184,0.12)] backdrop-blur-md">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black tracking-[0.24em] text-slate-500 uppercase">Mapa</p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.05em] text-slate-900">Distribuição por região</h3>
-              </div>
-              <span className="rounded-full bg-sky-100 px-3 py-1 text-[11px] font-black text-sky-700">
-                {regionCounts.reduce((sum, item) => sum + item.count, 0)} votos totais
-              </span>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {regionCounts.map(({ region, count }) => {
-                const percent = totalVotes > 0 ? (count / totalVotes) * 100 : 0
-                return (
-                  <div key={region} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-black text-slate-800">{region}</span>
-                      <span className="font-mono text-lg font-black text-slate-900">{count}</span>
-                    </div>
-                    <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500"
-                        style={{ width: `${Math.max(percent, count > 0 ? 12 : 0)}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-[11px] text-slate-500">{percent.toFixed(1)}% do total</p>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-
-          <section className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-            <div className="space-y-6">
-              {backOfficeStats.map(({ role, totals, winner }) => (
-                <section
-                  key={role}
-                  className="rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_24px_60px_rgba(148,163,184,0.15)] backdrop-blur-md"
-                >
-                  <div className="mb-5 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black tracking-[0.25em] text-slate-500 uppercase">Cargo</p>
-                      <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] text-slate-900">
-                        {roleLabels[role]}
-                      </h2>
-                    </div>
-
-                    {winner && (
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800">
-                        Liderança: {winner.candidate.name}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.15em] text-slate-500">
-                      <span>Gráfico por candidato</span>
-                      <span>{totals.reduce((sum, item) => sum + item.count, 0)} votos</span>
-                    </div>
-                    <div className="flex h-16 items-end gap-2">
-                      {totals.map(({ candidate, count }) => (
-                        <div key={candidate.id} className="flex flex-1 flex-col items-center justify-end gap-1">
-                          <div className="w-full rounded-t-xl bg-gradient-to-t from-blue-600 via-indigo-500 to-cyan-400" style={{ height: `${Math.max((count / Math.max(totalVotes, 1)) * 100, count > 0 ? 18 : 6)}%` }} />
-                          <div className="text-center">
-                            <p className="font-mono text-[10px] font-black text-slate-700">{count}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {totals.map(({ candidate, count, percent }) => (
-                      <div key={candidate.id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-base font-black text-slate-800">{candidate.name}</p>
-                            <p className="truncate text-[11px] text-slate-500">{candidate.group}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-mono text-2xl font-black text-slate-900">{count}</p>
-                            <p className="text-[11px] text-slate-500">{percent.toFixed(1)}%</p>
-                          </div>
-                        </div>
-
-                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-500"
-                            style={{ width: `${Math.min(percent, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-
-            <aside className="rounded-[28px] border border-white/60 bg-slate-900 p-5 text-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-              <p className="text-[10px] font-black tracking-[0.28em] text-slate-300 uppercase">Resumo executivo</p>
-              <h3 className="mt-3 text-2xl font-black tracking-[-0.05em]">Apuração ativa</h3>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-black tracking-[0.2em] text-slate-300 uppercase">Localização ativa</span>
-                </div>
-
-                <select
-                  value={selectedRegion}
-                  onChange={(event) => setSelectedRegion(event.target.value as RegionName)}
-                  className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-100 outline-none focus:border-cyan-400"
-                >
-                  {regionOptions.map(({ value, label }) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {backOfficeStats.map(({ role, totals, winner }) => (
-                  <div key={role} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black tracking-[0.2em] text-slate-300 uppercase">
-                        {roleLabels[role]}
-                      </span>
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-[10px] font-black text-emerald-300">
-                        {winner ? 'Líder' : 'Sem voto'}
-                      </span>
-                    </div>
-
-                    <p className="text-base font-black text-white">{winner?.candidate.name ?? 'Sem candidato'}</p>
-                    <p className="mt-1 text-sm text-slate-300">
-                      {winner ? `${winner.count} votos` : 'Nenhum voto computado'}
-                    </p>
-
-                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-700">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500"
-                        style={{ width: `${Math.min(winner ? winner.percent : 0, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
-                <p className="text-[10px] font-black tracking-[0.22em] text-indigo-200 uppercase">Ranking</p>
-                <div className="mt-3 space-y-2">
-                  {backOfficeStats
-                    .flatMap(({ role, totals }) =>
-                      totals.slice(0, 2).map((item, index) => ({
-                        role,
-                        item,
-                        index,
-                      })),
-                    )
-                    .map(({ role, item, index }) => (
-                      <div key={`${role}-${item.candidate.id}`} className="flex items-center justify-between text-sm text-slate-100">
-                        <span>
-                          {index + 1}. {item.candidate.name}
-                        </span>
-                        <span className="font-mono font-black">{item.count}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4">
-                <p className="text-[10px] font-black tracking-[0.22em] text-cyan-200 uppercase">Votos por horário</p>
-                <div className="mt-4 flex h-32 items-end gap-2">
-                  {hourlyVotes.map(({ hour, count }) => (
-                    <div key={hour} className="flex flex-1 flex-col items-center justify-end gap-2">
-                      <div
-                        className="w-full rounded-t-lg bg-gradient-to-t from-cyan-500 via-sky-500 to-blue-400"
-                        style={{ height: `${Math.max((count / maxHourlyVotes) * 100, count > 0 ? 12 : 4)}%` }}
-                      />
-                      <span className="text-[9px] font-bold text-slate-300">{hour}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </aside>
-          </section>
-
-          <section className="mt-8 rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_24px_60px_rgba(148,163,184,0.12)] backdrop-blur-md">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-[10px] font-black tracking-[0.28em] text-slate-500 uppercase">Tabela</p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.05em] text-slate-900">Registro de votos</h3>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <select
-                  value={roleFilter}
-                  onChange={(event) => setRoleFilter(event.target.value as 'all' | Role)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400"
-                >
-                  <option value="all">Todos</option>
-                  <option value="presidente">Presidente</option>
-                  <option value="vice-presidente">Vice-presidente</option>
-                </select>
-
-                <input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Filtrar por nome ou número"
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-400"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-100 text-slate-700">
-                  <tr>
-                    <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-[10px]">#</th>
-                    <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-[10px]">Data</th>
-                    <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-[10px]">Região</th>
-                    <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-[10px]">Presidente</th>
-                    <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-[10px]">Vice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                        Nenhum registro encontrado com esse filtro.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredRows.map((row) => (
-                      <tr key={row.id} className="border-t border-slate-200 bg-white hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono font-black text-slate-700">{row.index}</td>
-                        <td className="px-4 py-3 text-slate-600">{row.dateString}</td>
-                        <td className="px-4 py-3 text-slate-700 font-bold">{records.find((record) => record.id === row.id)?.region ?? '—'}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-800">{row.name}</div>
-                          <div className="text-[11px] text-slate-500">Número: {row.number}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-800">{row.viceName}</div>
-                          <div className="text-[11px] text-slate-500">Número: {row.viceNumber}</div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Painel de Tokens (Títulos de Eleitor) */}
-          <section className="mt-8 rounded-[28px] border border-white/60 bg-white/75 p-5 shadow-[0_24px_60px_rgba(148,163,184,0.12)] backdrop-blur-md">
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black tracking-[0.28em] text-slate-500 uppercase">Mesário</p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.05em] text-slate-900">Títulos de Eleitor</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  Gere tokens e entregue a cada eleitor. Cada token é de uso único.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const newToken: VoterToken = {
-                      token: generateToken(),
-                      label: `Eleitor ${tokens.length + 1}`,
-                      used: false,
-                    }
-                    const updated = [newToken, ...tokens]
-                    setTokens(updated)
-                    saveTokens(updated)
-                  }}
-                  className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_24px_rgba(59,130,246,0.35)] transition hover:-translate-y-0.5"
-                >
-                  + Gerar Token
-                </button>
-                <button
-                  onClick={() => {
-                    const batch = Array.from({ length: 10 }, (_, i) => ({
-                      token: generateToken(),
-                      label: `Eleitor ${tokens.length + i + 1}`,
-                      used: false,
-                    }))
-                    const updated = [...batch, ...tokens]
-                    setTokens(updated)
-                    saveTokens(updated)
-                  }}
-                  className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-black text-indigo-700 transition hover:-translate-y-0.5"
-                >
-                  + Gerar 10
-                </button>
-                <button
-                  onClick={() => {
-                    if (!window.confirm('Apagar todos os tokens? Esta ação não pode ser desfeita.')) return
-                    setTokens([])
-                    saveTokens([])
-                  }}
-                  className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-600 transition hover:-translate-y-0.5"
-                >
-                  Limpar tudo
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-3 flex gap-4 text-sm">
-              <span className="font-bold text-slate-700">Total: <b>{tokens.length}</b></span>
-              <span className="font-bold text-emerald-700">Usados: <b>{tokens.filter((t) => t.used).length}</b></span>
-              <span className="font-bold text-blue-700">Disponíveis: <b>{tokens.filter((t) => !t.used).length}</b></span>
-            </div>
-
-            {tokens.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-400 text-sm">
-                Nenhum token gerado. Clique em <b>+ Gerar Token</b> para começar.
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-h-96 overflow-y-auto pr-1">
-                {tokens.map((t) => (
-                  <div
-                    key={t.token}
-                    className={`flex items-center justify-between rounded-2xl border p-3 ${
-                      t.used
-                        ? 'border-slate-200 bg-slate-50 opacity-60'
-                        : 'border-blue-200 bg-blue-50'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className={`font-mono text-base font-black tracking-widest ${t.used ? 'text-slate-400 line-through' : 'text-blue-800'}`}>
-                        {t.token}
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-slate-500">{t.label}</p>
-                      {t.used && t.usedAt && (
-                        <p className="text-[10px] text-rose-500">
-                          Usado em {new Date(t.usedAt).toLocaleString('pt-BR')}
-                        </p>
-                      )}
-                    </div>
-                    <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
-                      t.used ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-700'
-                    }`}>
-                      {t.used ? 'Usado' : 'OK'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-        </div>
-      </main>
+      <BackOfficeDashboard
+        electionTitle={electionTitle}
+        totalVotes={totalVotes}
+        activeUsers={activeBackOfficeUsers}
+        stats={backOfficeStats}
+        regionCounts={regionCounts}
+        records={records}
+        tokens={tokens}
+        candidates={candidates}
+        managerOpen={isManagerOpen}
+        onManagerOpen={() => setIsManagerOpen(true)}
+        onManagerClose={() => setIsManagerOpen(false)}
+        onUpdateCandidates={handleUpdateCandidates}
+        onSelectPreset={handleSelectPreset}
+        onGoToUrna={() => navigateTo('/')}
+        onLogout={handleBackOfficeLogout}
+        onExportCsv={exportCsv}
+        onClearVotes={handleClearVotes}
+        onCreateToken={() => {
+          const newToken: VoterToken = {
+            token: generateToken(),
+            label: `Eleitor ${tokens.length + 1}`,
+            used: false,
+          }
+          const updated = [newToken, ...tokens]
+          setTokens(updated)
+          saveTokens(updated)
+        }}
+        onCreateTokenBatch={() => {
+          const batch = Array.from({ length: 10 }, (_, index) => ({
+            token: generateToken(),
+            label: `Eleitor ${tokens.length + index + 1}`,
+            used: false,
+          }))
+          const updated = [...batch, ...tokens]
+          setTokens(updated)
+          saveTokens(updated)
+        }}
+        onClearTokens={() => {
+          if (!tokens.length || !window.confirm('Apagar todos os tokens? Esta ação não pode ser desfeita.')) return
+          setTokens([])
+          saveTokens([])
+        }}
+      />
     )
   }
-
   if (mesarioPhase === 'waiting' && !isBackOfficeView) {
     return (
       <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_#f6faff_0%,_#e3edff_30%,_#bfd1fb_63%,_#dfeaff_100%)] text-[#0a1c3b]">
@@ -1340,36 +851,28 @@ export default function App() {
               {electionTitle}
             </h1>
             <p className="mt-2 max-w-xl text-xs sm:text-sm leading-5 text-[#5c6f91]">
-              Vote para <b>Presidente</b> e depois para <b>Vice-presidente</b>. Digite os 2 números no teclado e aperte <b>CONFIRMA</b>. Se errar, aperte <b>CORRIGE</b>.
+              Vote para <b>Vice-presidente</b> e depois para <b>Presidente</b>. Digite os 2 números no teclado e aperte <b>CONFIRMA</b>. Se errar, aperte <b>CORRIGE</b>.
             </p>
           </div>
 
           <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-white/80 p-3 shadow-sm">
             <div>
-              <p className="text-[9px] font-black tracking-[0.18em] text-slate-500 uppercase">Localização</p>
-              <select
-                value={selectedRegion}
-                onChange={(event) => setSelectedRegion(event.target.value as RegionName)}
-                className="mt-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-blue-400"
-              >
-                {regionOptions.map(({ value, label }) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
+              <p className="text-[9px] font-black tracking-[0.18em] text-slate-500 uppercase">Região do eleitor</p>
+              <p className="mt-1 text-sm font-black text-slate-800">{selectedRegion}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2" aria-label="Progresso da votação">
-            <Step active={role === 'presidente' && !finished} done={Boolean(votes.presidente)} number="01">
-              Presidente
+            <Step active={role === 'vice-presidente' && !finished} done={Boolean(votes['vice-presidente'])} number="01">
+              Vice-presidente
             </Step>
             <span className="h-px w-5 bg-[#b3c5e5]" />
             <Step
-              active={role === 'vice-presidente' && !finished}
-              done={Boolean(votes['vice-presidente'])}
+              active={role === 'presidente' && !finished}
+              done={Boolean(votes.presidente)}
               number="02"
             >
-              Vice-presidente
+              Presidente
             </Step>
           </div>
         </div>
@@ -1427,7 +930,7 @@ export default function App() {
               <section className="keypad-panel select-none" aria-label="Teclado numérico">
                 <div className="mb-3 flex items-center justify-between px-1 text-[8px] font-bold tracking-[0.13em] text-[#8da9d5] uppercase">
                   <span>Digite 2 números</span>
-                  <span>{role === 'presidente' ? 'Etapa 1/2' : 'Etapa 2/2'}</span>
+                  <span>{role === 'vice-presidente' ? 'Etapa 1/2' : 'Etapa 2/2'}</span>
                 </div>
                 <div className="keypad-grid">
                   {keypad.slice(0, 9).map((num) => (
@@ -1470,7 +973,7 @@ export default function App() {
           </div>
 
           <aside className="order-2 mx-auto grid w-full max-w-[920px] gap-4 sm:grid-cols-2">
-            {(['presidente', 'vice-presidente'] as Role[]).map((candidateRole) => {
+            {(['vice-presidente', 'presidente'] as Role[]).map((candidateRole) => {
               const isCurrentRole = role === candidateRole && !finished
               return (
                 <section
@@ -1576,6 +1079,65 @@ export default function App() {
           onUpdateCandidates={handleUpdateCandidates}
           onSelectPreset={handleSelectPreset}
         />
+      )}
+
+      {isRegionModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4 py-8 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="region-dialog-title"
+            className="w-full max-w-md rounded-[28px] border border-white/70 bg-white p-6 shadow-[0_32px_90px_rgba(2,12,36,0.35)] sm:p-8"
+          >
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+              <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s7-4.35 7-11a7 7 0 1 0-14 0c0 6.65 7 11 7 11Z" />
+                <circle cx="12" cy="10" r="2.25" />
+              </svg>
+            </div>
+            <p className="text-[10px] font-black tracking-[0.2em] text-blue-600 uppercase">Antes de votar</p>
+            <h2 id="region-dialog-title" className="mt-2 text-2xl font-black tracking-tight text-[#0a2c68]">
+              Selecione sua região
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Escolha a região onde seu voto será registrado para iniciar a votação.
+            </p>
+
+            <label htmlFor="voter-region" className="mt-6 mb-2 block text-xs font-black tracking-wide text-slate-700 uppercase">
+              Região eleitoral
+            </label>
+            <select
+              id="voter-region"
+              autoFocus
+              value={regionDraft}
+              onChange={(event) => setRegionDraft(event.target.value as RegionName | '')}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            >
+              <option value="" disabled>Selecione uma região</option>
+              {regionOptions.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleRegionBack}
+                className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleRegionConfirm}
+                disabled={!regionDraft}
+                className="rounded-2xl bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-900/15 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Continuar para votação
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
     </main>
@@ -1840,7 +1402,7 @@ function FinalScreen({
           </div>
         </div>
         <div className="my-4 grid gap-2.5">
-          {(['presidente', 'vice-presidente'] as Role[]).map((itemRole) => {
+          {(['vice-presidente', 'presidente'] as Role[]).map((itemRole) => {
             const vote = votes[itemRole]
             return (
               <div key={itemRole} className="result-card">

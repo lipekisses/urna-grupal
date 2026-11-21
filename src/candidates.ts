@@ -32,22 +32,6 @@ export const defaultCandidates: Candidate[] = [
 
   // --- CANDIDATOS A VICE-PRESIDENTE ---
   {
-    id: 'vice-fred',
-    name: 'Fred',
-    number: '18',
-    role: 'vice-presidente',
-    group: 'Partido Cachorro Orelha',
-    photo: 'https://stories.cnnbrasil.com.br/wp-content/uploads/sites/9/2026/04/diniz-tecnico-corinthians.jpg',
-  },
-  {
-    id: 'vice-arthur',
-    name: 'Arthur',
-    number: '44',
-    role: 'vice-presidente',
-    group: 'Partido Trabalhista do Grupal',
-    photo: 'https://ntvb.tmsimg.com/assets/assets/928962_v9_bc.jpg',
-  },
-  {
     id: 'vice-toth',
     name: 'Toth',
     number: '51',
@@ -55,15 +39,6 @@ export const defaultCandidates: Candidate[] = [
     group: 'Partido Comunista Maoista Santariterrense da Ordem Mundial',
     photo:
       'https://upload.wikimedia.org/wikipedia/commons/9/9e/Foto_oficial_de_Luiz_In%C3%A1cio_Lula_da_Silva_%28ombros%29_denoise.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=original',
-  },
-  {
-    id: 'vice-auri',
-    name: 'Auri',
-    number: '21',
-    role: 'vice-presidente',
-    group: 'Partido Roludo',
-    photo:
-      'https://upload.wikimedia.org/wikipedia/commons/b/b3/Foto_oficial_do_senador_Fl%C3%A1vio_Bolsonaro_%28v._AgSen%29_%283x4%29.jpg?utm_source=pt.wikipedia.org&utm_campaign=index&utm_content=original',
   },
   {
     id: 'vice-fatihzin',
