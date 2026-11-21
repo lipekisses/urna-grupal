@@ -42,12 +42,11 @@ export const defaultCandidates: Candidate[] = [
   },
   {
     id: 'vice-fatihzin',
-    name: 'Fatihzin',
+    name: 'Gabriel Fatihzin',
     number: '77',
     role: 'vice-presidente',
     group: 'Partido Lázaro Barbosa',
-    photo:
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?crop=faces&fit=crop&w=500&h=620&q=85',
+    photo: '/fatihzin.jpg',
   },
 ]
 
