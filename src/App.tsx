@@ -5,6 +5,7 @@ import { sounds } from './sound'
 import { BoletimModal } from './components/BoletimModal'
 import { CandidateManagerModal } from './components/CandidateManagerModal'
 import { BackOfficeDashboard } from './components/BackOfficeDashboard'
+import { initialOfficialTokens, type VoterToken } from './defaultTokens'
 
 const keypad = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 const CANDIDATES_STORAGE_KEY = 'urna_candidates_list_v10'
@@ -14,34 +15,83 @@ const BACKOFFICE_ACCESS_KEY = 'urna_backoffice_access'
 const BACKOFFICE_PRESENCE_KEY = 'urna_backoffice_presence'
 const BACKOFFICE_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`
 const TOKENS_STORAGE_KEY = 'urna_voter_tokens'
+const USED_TOKENS_STORAGE_KEY = 'urna_used_voter_tokens'
 
 // 🗳️ Modo Somente Vice-Presidente — coloca true para ocultar tudo de presidente
 const VP_ONLY_MODE = true
 
-// Tipos de token de eleitor
-type VoterToken = {
-  token: string
-  label: string
-  used: boolean
-  usedAt?: number
+export const cleanToken = (str: string) => str.toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+export function hashTokenCheck(str: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const c1 = chars[Math.abs(h) % chars.length]
+  const c2 = chars[Math.abs(h >> 5) % chars.length]
+  const c3 = chars[Math.abs(h >> 10) % chars.length]
+  return `${c1}${c2}${c3}`
 }
 
-const generateToken = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let result = ''
-  for (let i = 0; i < 8; i++) {
-    if (i === 4) result += '-'
-    result += chars[Math.floor(Math.random() * chars.length)]
+export function generateToken(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  let base = ''
+  for (let i = 0; i < 5; i++) {
+    base += chars[Math.floor(Math.random() * chars.length)]
   }
-  return result
+  const check = hashTokenCheck(base + '_URNA_2026')
+  const full = base + check
+  return `${full.slice(0, 4)}-${full.slice(4)}`
+}
+
+export function isValidVerifiableToken(raw: string): boolean {
+  const clean = cleanToken(raw)
+  if (clean.length !== 8) return false
+  const base = clean.slice(0, 5)
+  const check = clean.slice(5)
+  return hashTokenCheck(base + '_URNA_2026') === check
+}
+
+const getUsedTokens = (): string[] => {
+  try {
+    const saved = localStorage.getItem(USED_TOKENS_STORAGE_KEY)
+    if (saved) return JSON.parse(saved)
+  } catch {}
+  return []
+}
+
+const recordUsedToken = (rawToken: string) => {
+  try {
+    const clean = cleanToken(rawToken)
+    const used = getUsedTokens()
+    if (!used.includes(clean)) {
+      used.push(clean)
+      localStorage.setItem(USED_TOKENS_STORAGE_KEY, JSON.stringify(used))
+    }
+  } catch {}
 }
 
 const loadTokens = (): VoterToken[] => {
   try {
     const saved = localStorage.getItem(TOKENS_STORAGE_KEY)
-    if (saved) return JSON.parse(saved)
+    const usedList = getUsedTokens()
+    let list: VoterToken[] = []
+    if (saved) {
+      list = JSON.parse(saved)
+    }
+    if (!Array.isArray(list) || list.length === 0) {
+      list = initialOfficialTokens
+    }
+    return list.map((item) => {
+      if (usedList.includes(cleanToken(item.token))) {
+        return { ...item, used: true }
+      }
+      return item
+    })
   } catch {}
-  return []
+  return initialOfficialTokens
 }
 
 const saveTokens = (tokens: VoterToken[]) => {
@@ -397,9 +447,25 @@ export default function App() {
 
         // Marca o token como usado
         if (currentVoterToken) {
-          const updatedTokens = tokens.map((t) =>
-            t.token === currentVoterToken ? { ...t, used: true, usedAt: Date.now() } : t
-          )
+          const cleanedCurrent = cleanToken(currentVoterToken)
+          recordUsedToken(cleanedCurrent)
+
+          let found = false
+          const updatedTokens = tokens.map((t) => {
+            if (cleanToken(t.token) === cleanedCurrent) {
+              found = true
+              return { ...t, used: true, usedAt: Date.now() }
+            }
+            return t
+          })
+          if (!found) {
+            updatedTokens.unshift({
+              token: currentVoterToken,
+              label: `Eleitor ${updatedTokens.length + 1}`,
+              used: true,
+              usedAt: Date.now(),
+            })
+          }
           setTokens(updatedTokens)
           saveTokens(updatedTokens)
         }
@@ -425,26 +491,30 @@ export default function App() {
   // Validação do token do título de eleitor
   const handleTokenSubmit = useCallback((event: React.FormEvent) => {
     event.preventDefault()
-    const normalized = tokenInput.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '')
-    if (!normalized) {
+    const cleaned = cleanToken(tokenInput)
+    if (!cleaned) {
       setTokenError('Por favor, digite o token do seu título de eleitor.')
       return
     }
 
     const currentTokens = loadTokens()
-    const found = currentTokens.find((t) => t.token === normalized)
+    const found = currentTokens.find((t) => cleanToken(t.token) === cleaned)
+    const usedList = getUsedTokens()
 
-    if (!found) {
-      setTokenError('Token não encontrado. Verifique e tente novamente.')
-      return
-    }
-    if (found.used) {
+    if (usedList.includes(cleaned) || (found && found.used)) {
       setTokenError('Este título já foi utilizado para votar nesta eleição.')
       return
     }
 
+    const isValid = Boolean(found) || isValidVerifiableToken(cleaned)
+    if (!isValid) {
+      setTokenError('Token não encontrado ou inválido. Verifique e tente novamente.')
+      return
+    }
+
     // Token válido — libera a votação
-    setCurrentVoterToken(normalized)
+    const formattedToken = found?.token ?? (cleaned.length === 8 ? `${cleaned.slice(0, 4)}-${cleaned.slice(4)}` : cleaned)
+    setCurrentVoterToken(formattedToken)
     setTokenError('')
     setRegionDraft('')
     setMesarioPhase('voting')
@@ -1225,14 +1295,17 @@ function MesarioScreen({
               <input
                 type="text"
                 value={tokenInput}
-                onChange={(e) => onTokenChange(e.target.value)}
+                onChange={(e) => onTokenChange(e.target.value.toUpperCase())}
                 placeholder="Ex: ABCD-1234"
                 autoFocus
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center font-mono text-xl font-black tracking-[0.3em] text-[#0a2c68] outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 uppercase placeholder:text-slate-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
-                maxLength={9}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center font-mono text-xl font-black tracking-[0.25em] text-[#0a2c68] outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-200 uppercase placeholder:text-slate-300 placeholder:font-normal placeholder:tracking-normal placeholder:text-sm"
+                maxLength={14}
               />
+              <p className="mt-1.5 text-center text-[10px] text-slate-400">
+                Pode digitar com ou sem hífen (-)
+              </p>
             </div>
 
             {tokenError && (
