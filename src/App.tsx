@@ -15,6 +15,9 @@ const BACKOFFICE_PRESENCE_KEY = 'urna_backoffice_presence'
 const BACKOFFICE_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`
 const TOKENS_STORAGE_KEY = 'urna_voter_tokens'
 
+// 🗳️ Modo Somente Vice-Presidente — coloca true para ocultar tudo de presidente
+const VP_ONLY_MODE = true
+
 // Tipos de token de eleitor
 type VoterToken = {
   token: string
@@ -355,13 +358,13 @@ export default function App() {
     const updatedVotes = { ...votes, [role]: currentVote }
     setVotes(updatedVotes)
 
-    if (role === 'vice-presidente') {
+    if (role === 'vice-presidente' && !VP_ONLY_MODE) {
       sounds.playStepConfirm()
       setRole('presidente')
       setDigits('')
       setIsBlank(false)
     } else {
-      // Voto final (Presidente) -> Inicia animação oficial FIM e som da urna
+      // Voto final → Inicia animação oficial FIM e som da urna
       setIsEndingAnimation(true)
       sounds.playUrnaFim().then(() => {
         // Registra o voto completo no histórico permanente
@@ -375,12 +378,16 @@ export default function App() {
           dateString: new Date().toLocaleString('pt-BR'),
           region: selectedRegion,
           source: 'manual',
-          presidente: currentVote,
-          vicePresidente: {
-            kind: 'candidate',
-            number: updatedVotes['vice-presidente']?.number ?? viceCandidate?.number ?? '',
-            candidate: viceCandidate,
-          },
+          presidente: VP_ONLY_MODE
+            ? { kind: 'blank', number: '' }
+            : currentVote,
+          vicePresidente: VP_ONLY_MODE
+            ? currentVote
+            : {
+                kind: 'candidate',
+                number: updatedVotes['vice-presidente']?.number ?? viceCandidate?.number ?? '',
+                candidate: viceCandidate,
+              },
         }
         const newRecords = [newRecord, ...records]
         setRecords(newRecords)
@@ -851,7 +858,10 @@ export default function App() {
               {electionTitle}
             </h1>
             <p className="mt-2 max-w-xl text-xs sm:text-sm leading-5 text-[#5c6f91]">
-              Vote para <b>Vice-presidente</b> e depois para <b>Presidente</b>. Digite os 2 números no teclado e aperte <b>CONFIRMA</b>. Se errar, aperte <b>CORRIGE</b>.
+              {VP_ONLY_MODE
+                ? <>Vote para <b>Vice-presidente</b>. Digite os 2 números no teclado e aperte <b>CONFIRMA</b>. Se errar, aperte <b>CORRIGE</b>.</>
+                : <>Vote para <b>Vice-presidente</b> e depois para <b>Presidente</b>. Digite os 2 números no teclado e aperte <b>CONFIRMA</b>. Se errar, aperte <b>CORRIGE</b>.</>
+              }
             </p>
           </div>
 
@@ -866,14 +876,18 @@ export default function App() {
             <Step active={role === 'vice-presidente' && !finished} done={Boolean(votes['vice-presidente'])} number="01">
               Vice-presidente
             </Step>
-            <span className="h-px w-5 bg-[#b3c5e5]" />
-            <Step
-              active={role === 'presidente' && !finished}
-              done={Boolean(votes.presidente)}
-              number="02"
-            >
-              Presidente
-            </Step>
+            {!VP_ONLY_MODE && (
+              <>
+                <span className="h-px w-5 bg-[#b3c5e5]" />
+                <Step
+                  active={role === 'presidente' && !finished}
+                  done={Boolean(votes.presidente)}
+                  number="02"
+                >
+                  Presidente
+                </Step>
+              </>
+            )}
           </div>
         </div>
 
@@ -930,7 +944,7 @@ export default function App() {
               <section className="keypad-panel select-none" aria-label="Teclado numérico">
                 <div className="mb-3 flex items-center justify-between px-1 text-[8px] font-bold tracking-[0.13em] text-[#8da9d5] uppercase">
                   <span>Digite 2 números</span>
-                  <span>{role === 'vice-presidente' ? 'Etapa 1/2' : 'Etapa 2/2'}</span>
+                  <span>{VP_ONLY_MODE ? 'Vice-presidente' : (role === 'vice-presidente' ? 'Etapa 1/2' : 'Etapa 2/2')}</span>
                 </div>
                 <div className="keypad-grid">
                   {keypad.slice(0, 9).map((num) => (
@@ -973,7 +987,7 @@ export default function App() {
           </div>
 
           <aside className="order-2 mx-auto grid w-full max-w-[920px] gap-4 sm:grid-cols-2">
-            {(['vice-presidente', 'presidente'] as Role[]).map((candidateRole) => {
+            {(['vice-presidente', 'presidente'] as Role[]).filter((r) => !VP_ONLY_MODE || r === 'vice-presidente').map((candidateRole) => {
               const isCurrentRole = role === candidateRole && !finished
               return (
                 <section
@@ -1402,7 +1416,7 @@ function FinalScreen({
           </div>
         </div>
         <div className="my-4 grid gap-2.5">
-          {(['vice-presidente', 'presidente'] as Role[]).map((itemRole) => {
+          {(['vice-presidente', 'presidente'] as Role[]).filter((r) => !VP_ONLY_MODE || r === 'vice-presidente').map((itemRole) => {
             const vote = votes[itemRole]
             return (
               <div key={itemRole} className="result-card">
